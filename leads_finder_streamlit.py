@@ -66,6 +66,11 @@ def smart_search(query, pages=10):
             results.extend(ddg_results)
     return results
 
+def filter_unique_domains(df):
+    df["domain"] = df["email"].str.extract(r"@([a-zA-Z0-9.-]+)")
+    df = df.drop_duplicates(subset="domain")
+    return df.drop(columns=["domain"])
+
 def append_leads_smart(leads, storage_file=CSV_DB):
     try:
         existing_df = pd.read_csv(storage_file)
@@ -73,8 +78,9 @@ def append_leads_smart(leads, storage_file=CSV_DB):
         existing_df = pd.DataFrame(columns=["business_name", "url", "email", "description", "source"])
     combined = pd.concat([existing_df, pd.DataFrame(leads)], ignore_index=True)
     combined.drop_duplicates(subset=["email", "url"], inplace=True)
-    combined.to_csv(storage_file, index=False)
-    return combined
+    filtered = filter_unique_domains(combined)
+    filtered.to_csv(storage_file, index=False)
+    return filtered
 
 def export_to_excel_and_reset(csv_file=CSV_DB, excel_file=EXCEL_EXPORT):
     try:
