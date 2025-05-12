@@ -54,16 +54,30 @@ def ddg_search(query, max_results=10):
         pass
     return results
 
-def smart_search(query, pages=10):
+def generate_query_variants(base_query):
+    salt = random.randint(1000, 9999)
+    variants = [
+        f"{base_query} site:.co.za",
+        f"{base_query} suppliers",
+        f"{base_query} contact email",
+        f"{base_query} 2024",
+        f"{base_query} +wholesale",
+        f"{base_query} directory",
+        f"{base_query} #{salt}"
+    ]
+    return random.sample(variants, k=min(3, len(variants)))
+
+def smart_search(base_query, pages=10):
     results = []
-    for _ in range(random.randint(10, pages)):
-        offset = random.randint(0, 50)
-        brave_results = brave_search(query, BRAVE_API_KEY, count=5, offset=offset)
-        results.extend(brave_results)
-        time.sleep(1)
-        if len(results) < 5:
-            ddg_results = ddg_search(query, max_results=5)
-            results.extend(ddg_results)
+    for variant in generate_query_variants(base_query):
+        for _ in range(random.randint(5, pages)):
+            offset = random.randint(0, 50)
+            brave_results = brave_search(variant, BRAVE_API_KEY, count=5, offset=offset)
+            results.extend(brave_results)
+            time.sleep(1)
+            if len(brave_results) < 3:
+                ddg_results = ddg_search(variant, max_results=5)
+                results.extend(ddg_results)
     return results
 
 def filter_unique_domains(df):
