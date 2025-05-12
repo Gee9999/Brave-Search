@@ -15,7 +15,7 @@ EXCEL_EXPORT = "leads_export.xlsx"
 
 def extract_emails_from_url(url):
     try:
-        response = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        response = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text()
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", text)
@@ -23,12 +23,12 @@ def extract_emails_from_url(url):
     except:
         return []
 
-def brave_search(query, api_key, count=10, offset=0):
+def brave_search(query, api_key, count=5, offset=0):
     url = "https://api.search.brave.com/res/v1/web/search"
     headers = {"Accept": "application/json", "X-Subscription-Token": api_key}
     params = {"q": query, "count": count, "offset": offset}
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers=headers, params=params, timeout=5)
         data = response.json()
         return [{
             "source": "Brave",
@@ -36,10 +36,10 @@ def brave_search(query, api_key, count=10, offset=0):
             "url": item.get("url"),
             "description": item.get("description", "")
         } for item in data.get("web", {}).get("results", [])]
-    except:
+    except Exception as e:
         return []
 
-def ddg_search(query, max_results=10):
+def ddg_search(query, max_results=5):
     results = []
     try:
         with DDGS() as ddgs:
@@ -58,19 +58,17 @@ def generate_query_variants(base_query):
     salt = random.randint(1000, 9999)
     variants = [
         f"{base_query} site:.co.za",
-        f"{base_query} suppliers",
         f"{base_query} contact email",
-        f"{base_query} 2024",
-        f"{base_query} +wholesale",
-        f"{base_query} directory",
-        f"{base_query} #{salt}"
+        f"{base_query} suppliers #{salt}"
     ]
-    return random.sample(variants, k=min(3, len(variants)))
+    return variants
 
-def smart_search(base_query, pages=10):
+def smart_search(base_query, pages=5):
     results = []
-    for variant in generate_query_variants(base_query):
-        for _ in range(random.randint(5, pages)):
+    progress_area = st.empty()
+    for i, variant in enumerate(generate_query_variants(base_query), 1):
+        progress_area.info(f"Searching variant {i}/3: {variant}")
+        for j in range(pages):
             offset = random.randint(0, 50)
             brave_results = brave_search(variant, BRAVE_API_KEY, count=5, offset=offset)
             results.extend(brave_results)
@@ -78,6 +76,7 @@ def smart_search(base_query, pages=10):
             if len(brave_results) < 3:
                 ddg_results = ddg_search(variant, max_results=5)
                 results.extend(ddg_results)
+    progress_area.empty()
     return results
 
 def filter_unique_domains(df):
@@ -105,11 +104,15 @@ def export_to_excel_and_reset(csv_file=CSV_DB, excel_file=EXCEL_EXPORT):
     except:
         return None, 0
 
-def run_search_and_add(query):
+def run_search_and_add(query, debug_box):
     results = smart_search(query)
     leads = []
     for r in results:
         emails = extract_emails_from_url(r["url"])
+        if emails:
+            debug_box.text(f"✅ Found {len(emails)} email(s) at {r['url']}")
+        else:
+            debug_box.text(f"❌ No email at {r['url']}")
         for email in emails:
             leads.append({
                 "business_name": r["title"],
@@ -130,7 +133,9 @@ menu = st.sidebar.selectbox("Choose an action", ["Run New Search", "View Databas
 if menu == "Run New Search":
     query = st.text_input("Enter search query", "gift wholesalers gauteng")
     if st.button("Search & Save Leads"):
-        df = run_search_and_add(query)
+        debug_box = st.empty()
+        df = run_search_and_add(query, debug_box)
+        debug_box.empty()
         st.success(f"Added {len(df)} unique leads to database.")
         st.dataframe(df.tail())
 
