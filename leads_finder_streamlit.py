@@ -6,16 +6,16 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 import os
+import random
+import time
 
-# --- Configuration ---
 BRAVE_API_KEY = "BSA38iIprdXXP87R1dZ2wCuG50ojMBz"
 CSV_DB = "leads.csv"
 EXCEL_EXPORT = "leads_export.xlsx"
 
-# --- Functions ---
 def extract_emails_from_url(url):
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text()
         emails = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", text)
@@ -23,13 +23,10 @@ def extract_emails_from_url(url):
     except:
         return []
 
-def brave_search(query, api_key, count=10):
+def brave_search(query, api_key, count=10, offset=0):
     url = "https://api.search.brave.com/res/v1/web/search"
-    headers = {
-        "Accept": "application/json",
-        "X-Subscription-Token": api_key
-    }
-    params = {"q": query, "count": count}
+    headers = {"Accept": "application/json", "X-Subscription-Token": api_key}
+    params = {"q": query, "count": count, "offset": offset}
     try:
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
@@ -57,13 +54,17 @@ def ddg_search(query, max_results=10):
         pass
     return results
 
-def smart_search(query, count=10, fallback_threshold=3):
-    brave_results = brave_search(query, BRAVE_API_KEY, count)
-    if len(brave_results) < fallback_threshold:
-        ddg_results = ddg_search(query, max_results=count)
-        return brave_results + ddg_results
-    else:
-        return brave_results
+def smart_search(query, pages=10):
+    results = []
+    for _ in range(random.randint(10, pages)):
+        offset = random.randint(0, 50)
+        brave_results = brave_search(query, BRAVE_API_KEY, count=5, offset=offset)
+        results.extend(brave_results)
+        time.sleep(1)
+        if len(results) < 5:
+            ddg_results = ddg_search(query, max_results=5)
+            results.extend(ddg_results)
+    return results
 
 def append_leads_smart(leads, storage_file=CSV_DB):
     try:
@@ -99,7 +100,6 @@ def run_search_and_add(query):
             })
     return append_leads_smart(leads)
 
-# --- Streamlit UI ---
 st.markdown("""
 # **Leads Finder**
 #### <span style='color:red;'>Powered by Proto Trading</span>
